@@ -1,5 +1,16 @@
 # Roo Code Changelog
 
+## 3.15.0
+
+### Minor Changes
+
+- Add Reasoning Effort setting for OpenAI Compatible provider
+
+### Patch Changes
+
+- Use gemini provider when using Gemini on vertex ai
+- Overhaul CodeBlock rendering
+
 ## [3.14.3] - 2025-04-25
 
 - Add Boomerang Orchestrator as a built-in mode
