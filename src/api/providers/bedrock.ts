@@ -169,6 +169,15 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		// Handle cross-region inference
 		let modelId: string
 
+		// Add tracking variables
+		const startTime = performance.now()
+		let totalInputTokens = 0
+		let totalOutputTokens = 0
+		let latencyMs = 0
+
+		// Log the start of the model call
+		console.log(`[Bedrock] Starting call to model: ${modelConfig.id}`)
+
 		// For custom ARNs, use the ARN directly without modification
 		if (this.options.awsCustomArn) {
 			modelId = modelConfig.id
@@ -278,10 +287,15 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 
 				// Handle metadata events first.
 				if (streamEvent?.metadata?.usage) {
+					totalInputTokens = streamEvent.metadata.usage.inputTokens
+					totalOutputTokens = streamEvent.metadata.usage.outputTokens
+					if (streamEvent.metadata.metrics?.latencyMs) {
+						latencyMs = streamEvent.metadata.metrics.latencyMs
+					}
 					yield {
 						type: "usage",
-						inputTokens: streamEvent.metadata.usage.inputTokens || 0,
-						outputTokens: streamEvent.metadata.usage.outputTokens || 0,
+						inputTokens: streamEvent.metadata.usage.inputTokens,
+						outputTokens: streamEvent.metadata.usage.outputTokens,
 					}
 					continue
 				}
@@ -302,6 +316,10 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 
 						// Handle metadata events for the promptRouter.
 						if (streamEvent?.trace?.promptRouter?.usage) {
+							console.log(`[Bedrock] Prompt Router metrics:
+    Invoked model: ${streamEvent.trace.promptRouter.invokedModelId}
+    Input tokens: ${streamEvent.trace.promptRouter.usage.inputTokens}
+    Output tokens: ${streamEvent.trace.promptRouter.usage.outputTokens}`)
 							yield {
 								type: "usage",
 								inputTokens: streamEvent?.trace?.promptRouter?.usage?.inputTokens || 0,
@@ -341,6 +359,16 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 				}
 				// Handle message stop
 				if (streamEvent.messageStop) {
+					// Log completion metrics
+					const endTime = performance.now()
+					const timeElapsed = (endTime - startTime) / 1000 // Convert to seconds
+					
+					console.log(`[Bedrock] Call completed for model: ${modelConfig.id}
+    Time taken: ${timeElapsed.toFixed(2)}s
+    API Latency: ${(latencyMs / 1000).toFixed(2)}s
+    Input tokens: ${totalInputTokens}
+    Output tokens: ${totalOutputTokens}
+    Stop reason: ${streamEvent.messageStop.stopReason || "unknown"}`)
 					continue
 				}
 			}

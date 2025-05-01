@@ -30,6 +30,16 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		let stream: AnthropicStream<Anthropic.Messages.RawMessageStreamEvent>
 		const cacheControl: CacheControlEphemeral = { type: "ephemeral" }
 		let { id: modelId, maxTokens, thinking, temperature, virtualId } = this.getModel()
+		
+		// Add start time tracking
+		const startTime = performance.now()
+		let totalInputTokens = 0
+		let totalOutputTokens = 0
+		let cacheWriteTokens = 0
+		let cacheReadTokens = 0
+
+		// Log the start of the model call
+		console.log(`[Anthropic] Starting call to model: ${modelId}`)
 
 		switch (modelId) {
 			case "claude-3-7-sonnet-20250219":
@@ -129,18 +139,25 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 					// Tells us cache reads/writes/input/output.
 					const usage = chunk.message.usage
 
+					totalInputTokens = usage.input_tokens || 0
+					totalOutputTokens = usage.output_tokens || 0
+					cacheWriteTokens = usage.cache_creation_input_tokens || 0
+					cacheReadTokens = usage.cache_read_input_tokens || 0
+
 					yield {
 						type: "usage",
-						inputTokens: usage.input_tokens || 0,
-						outputTokens: usage.output_tokens || 0,
-						cacheWriteTokens: usage.cache_creation_input_tokens || undefined,
-						cacheReadTokens: usage.cache_read_input_tokens || undefined,
+						inputTokens: totalInputTokens,
+						outputTokens: totalOutputTokens,
+						cacheWriteTokens: cacheWriteTokens || undefined,
+						cacheReadTokens: cacheReadTokens || undefined,
 					}
 
 					break
 				case "message_delta":
 					// Tells us stop_reason, stop_sequence, and output tokens
 					// along the way and at the end of the message.
+					totalOutputTokens += chunk.usage.output_tokens || 0
+
 					yield {
 						type: "usage",
 						inputTokens: 0,
@@ -149,7 +166,16 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 
 					break
 				case "message_stop":
-					// No usage data, just an indicator that the message is done.
+					// Log completion metrics
+					const endTime = performance.now()
+					const timeElapsed = (endTime - startTime) / 1000 // Convert to seconds
+					
+					console.log(`[Anthropic] Call completed for model: ${modelId}
+    Time taken: ${timeElapsed.toFixed(2)}s
+    Input tokens: ${totalInputTokens}
+    Output tokens: ${totalOutputTokens}
+    Cache write tokens: ${cacheWriteTokens}
+    Cache read tokens: ${cacheReadTokens}`)
 					break
 				case "content_block_start":
 					switch (chunk.content_block.type) {
